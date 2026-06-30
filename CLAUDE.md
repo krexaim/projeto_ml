@@ -52,6 +52,13 @@ Estas regras vêm da especificação de entrega e têm precedência sobre conven
 
 4. **Código pensado para MLOps desde já.** A fase seguinte fará deploy com Docker, Airflow (orquestrando do dado bruto até a ABT) e FastAPI/Streamlit para servir o modelo. Por isso o código de pipeline precisa ser modular, parametrizado e executável de forma independente (cada estágio como entrypoint chamável), não acoplado a estado de notebook.
 
+5. **Multiplataforma (Linux, macOS e Windows).** O projeto é desenvolvido no Windows, mas a professora pode rodá-lo em **Linux ou macOS** — então tudo precisa funcionar em qualquer um dos três sistemas. Regras práticas:
+   - **Caminhos sempre portáveis:** monte paths com `pathlib.Path` / `os.path.join` (nunca concatene strings com `\` nem fixe separadores ou letras de drive como `C:\`). Caminhos vêm do config e são relativos à raiz do projeto.
+   - **Sem dependências de SO no código:** nada de chamadas a `cmd`/PowerShell, executáveis `.exe` ou comandos específicos de Windows dentro dos scripts `.py`.
+   - **Quebra de linha e encoding:** salve arquivos como UTF-8 com LF (`\n`); use um `.gitattributes` para evitar que o Git converta finais de linha. Ao ler/escrever arquivos, passe `encoding="utf-8"` explicitamente.
+   - **`requirements.txt` sem fixar build de SO:** não inclua wheels nem versões atreladas a uma única plataforma; prefira versões que tenham distribuição para Linux/macOS/Windows.
+   - **Docker é a garantia final:** o `docker-compose` (Airflow + serviço de predição) deve subir igual nos três sistemas, usando imagens base Linux — é a forma canônica de reproduzir o projeto na máquina da professora independentemente do SO dela.
+
 ## Cronograma, entregáveis e avaliação (oficial — brief LABDATA FIA)
 
 Datas no formato DD/MM (edição 2026).
@@ -99,7 +106,7 @@ Compilado das exigências e conselhos da professora para o sucesso nas etapas em
 - **Repositório individual:** mesmo com o código do grupo sendo igual, **cada aluno** deve ter o próprio repositório Git com o trabalho do grupo.
 - **Sem caminhos/variáveis "chumbados" (hardcoded):** nunca engesse nomes de variáveis ou paths no script. Use arquivos de configuração (`.json`, `.csv`, `.yml` ou módulo `.py`) para passar parâmetros e metadados.
 - **Scripts vs. Notebooks:** limpeza, padronização, criação da ABT e deploy usam **scripts** `.py`, não notebooks. Jupyter fica restrito à EDA e à avaliação do modelo.
-- **Reprodutibilidade:** o repositório precisa ter `requirements.txt` e `README.md` com instruções claras para a professora treinar e reproduzir o modelo do zero na máquina dela.
+- **Reprodutibilidade:** o repositório precisa ter `requirements.txt` e `README.md` com instruções claras para a professora treinar e reproduzir o modelo do zero na máquina dela — que pode ser **Linux ou macOS** (ver regra 5, "Multiplataforma"). As instruções do README devem usar comandos que funcionem nesses sistemas (ex.: `python3 -m venv`, ativação `source .venv/bin/activate`) e o caminho via Docker como alternativa garantida.
 
 ### 4. Apresentação em Grupo (Demoday)
 - **Gestão de tempo:** exatos 15 minutos. Ensaie. Se o tempo acabar e ainda estiverem no primeiro slide, a apresentação é cortada no meio.
