@@ -1,42 +1,44 @@
 # =============================================================================
-# config.yml — Configuração do pipeline de dados e modelagem
+# config.yml — Configuração do PIPELINE DE DADOS (/DataPipeline)
 # Projeto: Home Credit Default Risk (LABDATA / FIA)
 #
-# REGRA DO PROJETO: nenhum caminho, nome de coluna, parâmetro, variável alvo ou
-# metadado pode ficar "chumbado" (hardcoded) nos scripts. Tudo é lido daqui.
-# Caminhos são RELATIVOS à raiz do projeto e devem ser montados com pathlib
-# (portável entre Linux, macOS e Windows). Nunca fixe letras de drive (ex.: C:\).
+# A estrutura de entrega (slide 10 do brief) exige um arquivo de configuração
+# em /DataPipeline E outro em /Model. Este aqui cuida do domínio de DADOS
+# (raw -> clean -> abt). Os parâmetros de modelagem ficam em Model/config.yml.
 #
-# Este arquivo reflete o pipeline atual (raw -> clean -> abt -> modelo). Ao
-# migrar os scripts para lerem destas chaves, manter os nomes abaixo.
+# REGRA DO PROJETO: nada de hardcoding. Caminhos são RELATIVOS à raiz do projeto
+# e montados com pathlib (portável Linux/macOS/Windows). Nunca fixar drive (C:\).
 # =============================================================================
 
 project:
   target: TARGET            # variável alvo
-  id_column: SK_ID_CURR     # chave de uma linha por empréstimo/cliente
-  random_state: 42          # semente para reprodutibilidade
+  id_column: SK_ID_CURR     # chave: uma linha por empréstimo/cliente
+  random_state: 42
 
 # --- Caminhos (relativos à raiz do projeto) ---------------------------------
 paths:
-  raw_dir: Dados/raw            # CSVs originais do Kaggle
-  trusted_dir: Dados/trusted    # saídas limpas (clean_*.csv) e ABT
-  model_dir: Model/artifacts    # destino do modelo treinado (.pkl)
+  data_dir: Dados           # estrutura exigida: artefatos direto em /Dados (flat)
 
-# --- Bases de origem e artefatos de dados -----------------------------------
+# --- Artefatos de dados ------------------------------------------------------
+# Brutos: nomes originais do Kaggle (base é multi-tabela).
+# Limpos/ABT: nomes canônicos pedidos pela professora (clean_data.csv, abt.csv).
 data:
   raw_files:
     application: application_train.csv
     bureau: bureau.csv
     previous_application: previous_application.csv
-  clean_prefix: clean_          # clean_application_train.csv, clean_bureau.csv, ...
-  abt_file: abt_final.csv
+  clean_files:
+    application: clean_data.csv                  # tabela principal limpa (canônico)
+    bureau: clean_bureau.csv                      # intermediário p/ a ABT
+    previous_application: clean_previous_application.csv
+  abt_file: abt.csv                               # ABT final (canônico)
 
 # --- Sanitização (raw -> clean) ---------------------------------------------
 sanitization:
   null_threshold_pct: 50               # remove colunas com mais de X% de nulos
   numeric_fill_strategy: median        # median | mean | zero
   categorical_fill_value: Desconhecido
-  monetary_keyword: AMT                # colunas que contêm "AMT" -> preenchidas com 0
+  monetary_keyword: AMT                # colunas com "AMT" -> preenchidas com 0
   feature_engineering:
     days_birth_to_age: true            # cria IDADE_ANOS = abs(DAYS_BIRTH)/365
 
@@ -54,35 +56,3 @@ abt:
     AMT_CREDIT_SUM_DEBT: TOTAL_DEBT
     SK_ID_PREV: QTD_PREV_APPS
   fill_missing_after_merge: 0          # clientes sem histórico recebem 0
-
-# --- Modelagem (abt -> modelo) ----------------------------------------------
-model:
-  filename: modelo_risco_credito.pkl
-  test_size: 0.2
-  feature_selection:
-    enabled: true
-    top_n: 20                          # mantém as N variáveis mais importantes
-  balancing:
-    method: smote                      # smote | class_weight | none
-    class_weight:                      # usado p/ ponderar a classe minoritária
-      0: 1
-      1: 5
-  hyperparameters:                     # RandomForestClassifier
-    n_estimators: 250
-    max_depth: 15
-    n_jobs: -1
-  threshold: 0.35                      # corte de probabilidade p/ classe positiva
-  feature_engineering:
-    renda_por_familia: true            # AMT_INCOME_TOTAL / (CNT_FAM_MEMBERS + 1)
-
-# --- Avaliação (métrica oficial: ROC AUC) -----------------------------------
-evaluation:
-  primary_metric: roc_auc
-  report_metrics:                      # Dia 3 exige mais de uma métrica
-    - roc_auc
-    - precision
-    - recall
-    - f1
-    - ks
-    - confusion_matrix
-    - pr_curve

@@ -6,26 +6,38 @@
 - **Impacto Esperado**: Aumentar a rentabilidade da carteira de crédito e promover a inclusão financeira de forma sustentável para o negócio.
 
 
-## Etapas
+## Como treinar o modelo
 
- - Crie um ambiente virtual:
-python -m venv venv
+### 1. Ambiente virtual
 
- - Ative o ambiente virtual:
- - Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force
- - .\venv\Scripts\activate
-
- - Instale todas as bibliotecas necessárias para trabalhar com ML
+**Linux / macOS:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+```
 
- - Entre no site do Kaggle e baixe os dados necessários, seguindo o link abaixo:
-https://www.kaggle.com/competitions/home-credit-default-risk/overview
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
- - Executar o script data_sanization que está dentro da pasta DataPipeline
-python .\DataPipeline\data_sanization.py
+### 2. Dados
 
- - Executar:
-python .\DataPipeline\abt_transform.py
+Baixe a base do Kaggle (<https://www.kaggle.com/competitions/home-credit-default-risk/overview>)
+e coloque os CSVs **brutos** na pasta `Dados/`:
+`application_train.csv`, `bureau.csv`, `previous_application.csv`.
 
- - Executar o script para treinar o modelo:
-python .\Model\train.py 
+### 3. Pipeline (do dado bruto ao modelo)
+
+Execute a partir da raiz do projeto, nesta ordem:
+```bash
+python DataPipeline/data_sanitization.py   # raw -> Dados/clean_data.csv (+ auxiliares)
+python DataPipeline/abt_transform.py       # clean -> Dados/abt.csv
+python Model/train.py                       # abt -> Model/artifacts/modelo_risco_credito.pkl
+```
+
+Os parâmetros (caminhos, colunas, hiperparâmetros, threshold) ficam nos arquivos de
+configuração `DataPipeline/config.yml` e `Model/config.yml` — não é preciso editar os scripts.

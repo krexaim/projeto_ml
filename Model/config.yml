@@ -1,0 +1,57 @@
+# =============================================================================
+# config.yml — Configuração da ETAPA DE MODELAGEM (/Model)
+# Projeto: Home Credit Default Risk (LABDATA / FIA)
+#
+# A estrutura de entrega (slide 10 do brief) exige um arquivo de configuração
+# em /Model além do de /DataPipeline. Este aqui cuida do domínio de MODELO e
+# AVALIAÇÃO. As poucas chaves compartilhadas com o pipeline de dados (caminho da
+# ABT e variável alvo) são repetidas aqui para que train.py/evaluation rodem de
+# forma independente.
+#
+# REGRA DO PROJETO: nada de hardcoding. Caminhos relativos à raiz, via pathlib.
+# =============================================================================
+
+project:
+  target: TARGET            # variável alvo (compartilhada com o pipeline de dados)
+  random_state: 42
+
+# --- Entrada (onde está a ABT) ----------------------------------------------
+data:
+  data_dir: Dados
+  abt_file: abt.csv
+
+# --- Saída (modelo treinado + gráficos) -------------------------------------
+paths:
+  model_dir: Model/artifacts
+
+# --- Modelagem (abt -> modelo) ----------------------------------------------
+model:
+  filename: modelo_risco_credito.pkl
+  test_size: 0.2
+  feature_selection:
+    enabled: true
+    top_n: 20                          # mantém as N variáveis mais importantes
+  balancing:
+    method: smote                      # smote | class_weight | none
+    class_weight:                      # ponderação da classe minoritária
+      0: 1
+      1: 5
+  hyperparameters:                     # RandomForestClassifier
+    n_estimators: 250
+    max_depth: 15
+    n_jobs: -1
+  threshold: 0.35                      # corte de probabilidade p/ classe positiva
+  feature_engineering:
+    renda_por_familia: true            # AMT_INCOME_TOTAL / (CNT_FAM_MEMBERS + 1)
+
+# --- Avaliação (métrica oficial: ROC AUC) -----------------------------------
+evaluation:
+  primary_metric: roc_auc
+  report_metrics:                      # Dia 3 exige mais de uma métrica
+    - roc_auc
+    - precision
+    - recall
+    - f1
+    - ks
+    - confusion_matrix
+    - pr_curve

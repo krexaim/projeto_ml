@@ -1,78 +1,124 @@
+"""Treino do modelo de risco de crédito (abt -> modelo).
+
+Lê o config próprio de /Model (Model/config.yml): hiperparâmetros, seleção de
+variáveis, estratégia de balanceamento, threshold e caminhos — nada chumbado.
+Caminhos resolvidos relativos à raiz do projeto (portável). Lê a ABT de
+/Dados/abt.csv. Métrica oficial reportada: ROC AUC.
+"""
+
 import pandas as pd
 import joblib
-import os
+import matplotlib
+matplotlib.use("Agg")  # backend sem display: funciona em servidor/headless (Docker)
 import matplotlib.pyplot as plt
+from pathlib import Path
+import yaml
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, roc_auc_score
 from imblearn.over_sampling import SMOTE
 
-DATA_FILE = os.path.join('Dados', 'trusted', 'abt_final.csv')
+# Raiz do projeto = pasta-pai de Model/ (este arquivo vive em Model/)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = PROJECT_ROOT / "Model" / "config.yml"
 
-def train_model():
+
+def load_config(path: Path = CONFIG_PATH) -> dict:
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def train_model(cfg: dict | None = None) -> None:
+    cfg = cfg or load_config()
+
+    target = cfg["project"]["target"]
+    seed = cfg["project"]["random_state"]
+    mcfg = cfg["model"]
+
+    data_dir = PROJECT_ROOT / cfg["data"]["data_dir"]
+    data_file = data_dir / cfg["data"]["abt_file"]
+
     print("--- Iniciando Pipeline com ABT Finalizada ---")
-    
-    # 1. Carregamento e Blindagem
-    df = pd.read_csv(DATA_FILE)
-    
-    # Filtro essencial: Garantir que só trabalhamos com números (além do Target)
-    target = df['TARGET']
-    df = df.select_dtypes(include=['number']).drop(columns=['TARGET'], errors='ignore')
-    df = df.fillna(0) # Segurança extra para nulos residuais
-    
-    # Adicionar o Target de volta
-    df['TARGET'] = target
-    
-    # 2. Feature Engineering
-    if 'AMT_INCOME_TOTAL' in df.columns and 'CNT_FAM_MEMBERS' in df.columns:
-        df['RENDA_POR_FAMILIA'] = df['AMT_INCOME_TOTAL'] / (df['CNT_FAM_MEMBERS'] + 1)
-    
-    # 3. Seleção de Variáveis por Importância (Sem correlação manual para não perder sinal)
-    X = df.drop(columns=['TARGET'])
-    y = df['TARGET']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    df = pd.read_csv(data_file)
 
-    print("Rankeando variáveis...")
-    rf_ranker = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-    rf_ranker.fit(X_train, y_train)
-    
-    # Seleção dos 20 melhores para dar mais contexto ao modelo
-    importances = pd.Series(rf_ranker.feature_importances_, index=X.columns)
-    top_features = importances.nlargest(20).index.tolist()
-    
-    # Aplicar corte
-    X_train = X_train[top_features]
-    X_test = X_test[top_features]
-    
-    print(f"Features selecionadas para treino: {top_features}")
+    # 1. Mantém apenas colunas numéricas + o target
+    y = df[target]
+    df = df.select_dtypes(include=["number"]).drop(columns=[target], errors="ignore")
+    df = df.fillna(0)
+    df[target] = y
 
-    # 4. Balanceamento e Treino
-    smote = SMOTE(random_state=42)
-    X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+    # 2. Feature engineering (configurável)
+    if mcfg["feature_engineering"].get("renda_por_familia") \
+            and "AMT_INCOME_TOTAL" in df.columns and "CNT_FAM_MEMBERS" in df.columns:
+        df["RENDA_POR_FAMILIA"] = df["AMT_INCOME_TOTAL"] / (df["CNT_FAM_MEMBERS"] + 1)
 
-    model = RandomForestClassifier(
-        n_estimators=250, # Aumentei um pouco para acomodar as novas features
-        max_depth=15,    # Reduzi levemente para evitar overfitting nas novas features
-        class_weight={0: 1, 1: 5}, 
-        random_state=42, 
-        n_jobs=-1
+    X = df.drop(columns=[target])
+    y = df[target]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=mcfg["test_size"], random_state=seed
     )
-    model.fit(X_train_res, y_train_res)
 
-    # 5. Avaliação com Threshold 0.35
+    # 3. Seleção de variáveis por importância (configurável)
+    fs = mcfg["feature_selection"]
+    if fs["enabled"]:
+        print("Rankeando variáveis...")
+        ranker = RandomForestClassifier(
+            n_estimators=100, random_state=seed, n_jobs=mcfg["hyperparameters"]["n_jobs"]
+        )
+        ranker.fit(X_train, y_train)
+        importances = pd.Series(ranker.feature_importances_, index=X_train.columns)
+        top_features = importances.nlargest(fs["top_n"]).index.tolist()
+        X_train = X_train[top_features]
+        X_test = X_test[top_features]
+        print(f"Features selecionadas para treino: {top_features}")
+    else:
+        top_features = X_train.columns.tolist()
+
+    # 4. Balanceamento (configurável: smote | class_weight | none)
+    balancing = mcfg["balancing"]
+    if balancing.get("method") == "smote":
+        X_train, y_train = SMOTE(random_state=seed).fit_resample(X_train, y_train)
+
+    class_weight = balancing.get("class_weight")
+    if class_weight is not None:
+        # YAML pode carregar as chaves como str; garante int (rótulos das classes)
+        class_weight = {int(k): v for k, v in class_weight.items()}
+
+    hp = mcfg["hyperparameters"]
+    model = RandomForestClassifier(
+        n_estimators=hp["n_estimators"],
+        max_depth=hp["max_depth"],
+        n_jobs=hp["n_jobs"],
+        class_weight=class_weight,
+        random_state=seed,
+    )
+    model.fit(X_train, y_train)
+
+    # 5. Avaliação no conjunto de TESTE (held-out) — métrica oficial: ROC AUC
     probs = model.predict_proba(X_test)[:, 1]
-    y_pred = (probs >= 0.35).astype(int)
+    threshold = mcfg["threshold"]
+    y_pred = (probs >= threshold).astype(int)
 
-    print(f"\n--- Relatório Final ---")
+    print("\n--- Relatório Final (conjunto de teste) ---")
+    print(f"ROC AUC: {roc_auc_score(y_test, probs):.4f}")
+    print(f"Threshold aplicado: {threshold}")
     print(classification_report(y_test, y_pred))
 
-    joblib.dump(model, 'modelo_risco_credito.pkl')
-    
-    # Visualização de Elite
-    pd.Series(model.feature_importances_, index=top_features).nlargest(10).plot(kind='barh')
-    plt.title('Top 10 Variáveis após Merge (Bureau + PrevApp)')
+    # 6. Persistência do modelo no diretório configurado
+    model_dir = PROJECT_ROOT / cfg["paths"]["model_dir"]
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_path = model_dir / mcfg["filename"]
+    joblib.dump(model, model_path)
+    print(f"Modelo salvo em: {model_path}")
+
+    # 7. Importância das variáveis do modelo final
+    fig_path = model_dir / "feature_importance_final.png"
+    pd.Series(model.feature_importances_, index=top_features).nlargest(10).plot(kind="barh")
+    plt.title("Top 10 Variáveis (após merge Bureau + PrevApp)")
     plt.tight_layout()
-    plt.savefig('feature_importance_final.png')
+    plt.savefig(fig_path)
+    print(f"Gráfico salvo em: {fig_path}")
+
 
 if __name__ == "__main__":
     train_model()

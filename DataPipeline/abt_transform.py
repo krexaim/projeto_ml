@@ -1,44 +1,60 @@
+"""Construção da ABT (clean -> abt).
+
+Lê as bases sanitizadas, agrega o histórico (bureau e previous_application)
+para uma linha por cliente e junta tudo na tabela principal. Todos os caminhos,
+nomes de coluna, agregações e renomeações vêm do config.yml — nada chumbado.
+Caminhos resolvidos relativos à raiz do projeto (portável). Saída: Dados/abt.csv.
+"""
+
 import pandas as pd
-import os
+from pathlib import Path
+import yaml
 
-# Caminhos
-TRUSTED_DIR = r'C:\Users\MBA\DataEngineering\projeto_ml\projeto_ml\Dados\trusted'
-OUTPUT_ABT = os.path.join(TRUSTED_DIR, 'abt_final.csv')
+# Raiz do projeto = pasta-pai de DataPipeline/
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = PROJECT_ROOT / "DataPipeline" / "config.yml"
 
-def build_abt():
+
+def load_config(path: Path = CONFIG_PATH) -> dict:
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def build_abt(cfg: dict | None = None) -> pd.DataFrame:
+    cfg = cfg or load_config()
+
+    data_dir = PROJECT_ROOT / cfg["paths"]["data_dir"]
+    clean_files = cfg["data"]["clean_files"]
+    id_col = cfg["project"]["id_column"]
+
     print("--- Construindo a ABT Final ---")
-    
+
     # 1. Carregar bases sanitizadas
-    app = pd.read_csv(os.path.join(TRUSTED_DIR, 'clean_application_train.csv'))
-    bureau = pd.read_csv(os.path.join(TRUSTED_DIR, 'clean_bureau.csv'))
-    prev_app = pd.read_csv(os.path.join(TRUSTED_DIR, 'clean_previous_application.csv'))
+    app = pd.read_csv(data_dir / clean_files["application"])
+    bureau = pd.read_csv(data_dir / clean_files["bureau"])
+    prev_app = pd.read_csv(data_dir / clean_files["previous_application"])
 
-    # 2. Agregação Inteligente (O segredo do sucesso)
-    # Agrupamos bureau pelo ID do cliente, calculando métricas de risco
-    bureau_agg = bureau.groupby('SK_ID_CURR').agg({
-        'AMT_CREDIT_SUM': 'sum',
-        'AMT_CREDIT_SUM_DEBT': 'sum',
-        'DAYS_CREDIT': 'max'
-    }).rename(columns={'AMT_CREDIT_SUM': 'TOTAL_CREDIT_EXT', 'AMT_CREDIT_SUM_DEBT': 'TOTAL_DEBT'})
+    # 2. Agregações (config-driven), uma linha por id_col
+    aggs = cfg["abt"]["aggregations"]
+    rename = cfg["abt"]["rename"]
+    bureau_agg = bureau.groupby(id_col).agg(aggs["bureau"]).rename(columns=rename)
+    prev_agg = prev_app.groupby(id_col).agg(aggs["previous_application"]).rename(columns=rename)
 
-    # Agrupamos prev_app calculando número de empréstimos anteriores
-    prev_agg = prev_app.groupby('SK_ID_CURR').agg({
-        'SK_ID_PREV': 'count'
-    }).rename(columns={'SK_ID_PREV': 'QTD_PREV_APPS'})
-
-    # 3. Merge (Juntando tudo na tabela principal)
+    # 3. Merge na tabela principal
     print("Realizando os merges...")
-    abt = app.merge(bureau_agg, on='SK_ID_CURR', how='left')
-    abt = abt.merge(prev_agg, on='SK_ID_CURR', how='left')
+    abt = app.merge(bureau_agg, on=id_col, how="left")
+    abt = abt.merge(prev_agg, on=id_col, how="left")
 
-    # 4. Limpeza pós-merge
-    # Clientes sem registros em outras tabelas receberão 0 nessas novas colunas
-    abt.fillna(0, inplace=True)
+    # 4. Clientes sem histórico recebem o valor configurado
+    abt = abt.fillna(cfg["abt"]["fill_missing_after_merge"])
 
-    # 5. Salvar ABT Final
-    abt.to_csv(OUTPUT_ABT, index=False)
+    # 5. Salvar ABT
+    output_abt = data_dir / cfg["data"]["abt_file"]
+    abt.to_csv(output_abt, index=False)
     print(f"ABT Final construída com sucesso! Shape: {abt.shape}")
-    print(f"Salva em: {OUTPUT_ABT}")
+    print(f"Salva em: {output_abt}")
+    return abt
+
 
 if __name__ == "__main__":
     build_abt()

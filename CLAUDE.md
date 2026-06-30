@@ -14,16 +14,19 @@ Métrica oficial de avaliação do modelo: **ROC AUC**.
 
 A **primeira parte (etapa de grupo)** já foi implementada — o repositório não é mais um scaffold vazio. Já existem:
 
-- `DataPipeline/data_sanitization.py` — limpeza raw → clean (saídas em `Dados/trusted/clean_*.csv`).
-- `DataPipeline/abt_transform.py` — construção da ABT (clean → `abt_final.csv`).
-- `DataPipeline/config.yml` — **preenchido**: fonte única de parâmetros do pipeline (caminhos, colunas, target, sanitização, agregações da ABT, hiperparâmetros do modelo, threshold e métricas). Ver o schema no próprio arquivo.
-- `Model/train.py` — treino (RandomForest + SMOTE) salvando o `.pkl`.
+- `DataPipeline/data_sanitization.py` — limpeza raw → clean (saídas direto em `/Dados`: `clean_data.csv` e tabelas auxiliares limpas).
+- `DataPipeline/abt_transform.py` — construção da ABT (clean → `Dados/abt.csv`).
+- `DataPipeline/config.yml` — **config do domínio de dados** (caminhos, nomes de arquivo, target, sanitização, agregações da ABT).
+- `Model/config.yml` — **config do domínio de modelo/avaliação** (hiperparâmetros, `test_size`, balanceamento, threshold, métricas). Os dois configs cumprem a exigência do brief (config em `/DataPipeline` **e** em `/Model`).
+- `Model/train.py` — treino (RandomForest + SMOTE) lendo `Model/config.yml`, salvando o `.pkl` em `Model/artifacts/`.
 - `Model/evaluation.ipynb` e `DataPipeline/exp_analysis.ipynb` — notebooks de avaliação e EDA (ainda iniciais).
 - `requirements.txt` e `README.md` — preenchidos.
 
-**Layout de dados real adotado:** `Dados/raw/` (CSVs do Kaggle) → `Dados/trusted/` (`clean_*.csv` e `abt_final.csv`). Isso difere dos nomes idealizados `raw_data.csv` / `clean_data.csv` / `abt.csv` citados na seção "Arquitetura" abaixo, que permanecem como referência conceitual do fluxo.
+**Layout de dados (estrutura do brief, slide 10):** artefatos direto em `/Dados` (flat) — `clean_data.csv` e `abt.csv` com os nomes canônicos pedidos. Os brutos mantêm os nomes originais do Kaggle (`application_train.csv`, `bureau.csv`, `previous_application.csv`) porque a base é multi-tabela; tabelas auxiliares limpas (`clean_bureau.csv`, `clean_previous_application.csv`) são intermediárias da ABT.
 
-**Pendências conhecidas** (a tratar): os scripts ainda **não leem do `config.yml`** (há parâmetros e caminhos chumbados, inclusive caminhos absolutos de máquinas de colegas em `abt_transform.py` e nos notebooks — violam a regra nº1 e a portabilidade); falta o arquivo de configuração próprio de `/Model`; `Model/predict.py` está vazio; todo o `/MLOps` (deploy, Airflow, app) e o `docker-compose.yml` continuam placeholders — são da etapa individual.
+Os scripts e notebooks **leem do config** (cada um do config do seu domínio) e resolvem os caminhos de forma relativa à raiz do projeto via `pathlib` (sem caminhos absolutos nem letras de drive). O modelo treinado e os gráficos são salvos em `Model/artifacts/` (ignorada pelo Git).
+
+**Pendências conhecidas** (a tratar): a avaliação (`evaluation.ipynb`) ainda roda sobre a base inteira, não sobre um conjunto de teste *held-out*; a imputação em `data_sanitization.py` é feita antes do split treino/teste (risco de vazamento); `Model/predict.py` está vazio; todo o `/MLOps` (deploy, Airflow, app) e o `docker-compose.yml` continuam placeholders — são da etapa individual.
 
 `MLOps/app/fastAPIorstreamlit` é placeholder provisório (será o serviço FastAPI **ou** Streamlit); renomeie-o ao implementar, não o trate como artefato real.
 
