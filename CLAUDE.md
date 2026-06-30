@@ -12,9 +12,20 @@ Métrica oficial de avaliação do modelo: **ROC AUC**.
 
 ## Estado atual
 
-O repositório é hoje um **scaffold**: a árvore de pastas exigida já existe, mas os scripts (`.py`), notebooks (`.ipynb`) e arquivos de configuração estão **vazios** (placeholders). Não há ainda `requirements.txt`, suíte de testes ou comandos de build/lint configurados. Ao implementar, preencha estes arquivos respeitando as regras abaixo — não reorganize a estrutura.
+A **primeira parte (etapa de grupo)** já foi implementada — o repositório não é mais um scaffold vazio. Já existem:
 
-Alguns placeholders têm nomes provisórios que **não** são os nomes finais e existem só para marcar a pasta no Git: `Dados/brutecleanabt` (será desdobrado em `raw_data.csv` / `clean_data.csv` / `abt.csv`) e `MLOps/app/fastAPIorstreamlit` (será o serviço FastAPI **ou** Streamlit). Renomeie-os ao implementar; não os trate como artefatos reais.
+- `DataPipeline/data_sanitization.py` — limpeza raw → clean (saídas em `Dados/trusted/clean_*.csv`).
+- `DataPipeline/abt_transform.py` — construção da ABT (clean → `abt_final.csv`).
+- `DataPipeline/config.yml` — **preenchido**: fonte única de parâmetros do pipeline (caminhos, colunas, target, sanitização, agregações da ABT, hiperparâmetros do modelo, threshold e métricas). Ver o schema no próprio arquivo.
+- `Model/train.py` — treino (RandomForest + SMOTE) salvando o `.pkl`.
+- `Model/evaluation.ipynb` e `DataPipeline/exp_analysis.ipynb` — notebooks de avaliação e EDA (ainda iniciais).
+- `requirements.txt` e `README.md` — preenchidos.
+
+**Layout de dados real adotado:** `Dados/raw/` (CSVs do Kaggle) → `Dados/trusted/` (`clean_*.csv` e `abt_final.csv`). Isso difere dos nomes idealizados `raw_data.csv` / `clean_data.csv` / `abt.csv` citados na seção "Arquitetura" abaixo, que permanecem como referência conceitual do fluxo.
+
+**Pendências conhecidas** (a tratar): os scripts ainda **não leem do `config.yml`** (há parâmetros e caminhos chumbados, inclusive caminhos absolutos de máquinas de colegas em `abt_transform.py` e nos notebooks — violam a regra nº1 e a portabilidade); falta o arquivo de configuração próprio de `/Model`; `Model/predict.py` está vazio; todo o `/MLOps` (deploy, Airflow, app) e o `docker-compose.yml` continuam placeholders — são da etapa individual.
+
+`MLOps/app/fastAPIorstreamlit` é placeholder provisório (será o serviço FastAPI **ou** Streamlit); renomeie-o ao implementar, não o trate como artefato real.
 
 ## Arquitetura: fluxo de dados (a regra central)
 
