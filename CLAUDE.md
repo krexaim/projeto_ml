@@ -59,7 +59,7 @@ Datas no formato DD/MM (edição 2026).
 ### Cronograma do trabalho em grupo
 - **Dia 1 — Kickoff (22/06):** apresentação do contexto, objetivos e aula-exemplo.
 - **Dia 2 — Dados (29/06):** definir o problema, o impacto no negócio e as métricas de sucesso; EDA (padrões, qualidade da base, nulos, inconsistências, comportamento das variáveis); estruturar a **ABT**.
-- **Dia 3 — Modelo (06/07):** desenvolver a modelagem e avaliar em cenário de teste.
+- **Dia 3 — Modelo (06/07):** desenvolver a modelagem e avaliar em cenário de teste. **Traga mais de uma métrica de avaliação do modelo** — além do ROC AUC oficial, reporte métricas complementares (ex.: precisão, recall, F1, KS, matriz de confusão, curva PR) para sustentar a leitura do desempenho à luz do desbalanceamento da `TARGET` e do problema de negócio.
 - **Dia 4 — Narrativa de negócio:** análise crítica do desempenho (limitações, erros, vieses, cenários de falha) + storytelling + **Demoday** (pitch de 15 min para banca/empresa).
 - **Entrega final do grupo: 13/07.**
 - **Entrega final individual: 15/07.**
