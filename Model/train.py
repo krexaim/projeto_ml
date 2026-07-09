@@ -97,6 +97,7 @@ def train_and_evaluate():
     joblib.dump(X_val, eval_dir / "X_test.pkl")
     joblib.dump(y_val, eval_dir / "y_test.pkl")
     joblib.dump(list(X_val.columns), eval_dir / "feature_names.pkl")
+    joblib.dump(X_train.median(numeric_only=True), eval_dir / "medianas.pkl")
 
     modelos = build_models(cfg)
 
