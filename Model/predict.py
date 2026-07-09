@@ -3,13 +3,14 @@ import pandas as pd
 from pathlib import Path
 
 def carregar_modelo(model_dir: Path, nome_modelo: str):
-    model_path = Path(r'xgboost_model.pkl')
-    medianas_path = Path(r'medianas.pkl')
-    threshold_path = Path(r'threshold.txt')
-    features_path = Path(r'feature_names.pkl')
+    model_path = model_dir / nome_modelo / f"{nome_modelo.lower()}_model.pkl"
+    medianas_path = model_dir / "evaluation_data" / "medianas.pkl"
+    threshold_path = model_dir / nome_modelo / "threshold.txt"
+    features_path = model_dir / "evaluation_data" / "feature_names.pkl"
     
-    if not model_path.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado: {model_path}")
+    if nome_modelo is None:
+        with open(model_dir / "best_model.txt", encoding="utf-8") as f:
+            nome_modelo = f.read().strip()
         
     model = joblib.load(model_path)
     medianas = joblib.load(medianas_path)
