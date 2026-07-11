@@ -42,7 +42,7 @@ def save_feature_importance(model, feature_names, save_path, model_name):
     except Exception as e:
         print(f"Feature importance não disponível para {model_name}: {e}")
 
-def build_models(cfg):
+def build_models(cfg, y_train=None):
     random_state = cfg["project"]["random_state"]
     models_cfg = cfg["models"]
 
@@ -56,6 +56,19 @@ def build_models(cfg):
         params["random_state"] = random_state
 
         if model_info["class"] == "XGBClassifier":
+            spw = params.get("scale_pos_weight", "auto")
+            if isinstance(spw, str) and spw.lower() == "auto":
+                if y_train is None:
+                    raise ValueError(
+                        "scale_pos_weight='auto' requer y_train: "
+                        "build_models(cfg, y_train=y_train)"
+                    )
+                neg, pos = (y_train == 0).sum(), (y_train == 1).sum()
+                params["scale_pos_weight"] = neg / pos
+                print(
+                    f"scale_pos_weight calculado automaticamente: "
+                    f"{params['scale_pos_weight']:.2f} (neg={neg}, pos={pos})"
+                )
             model = xgb.XGBClassifier(**params)
 
         elif model_info["class"] == "RandomForestClassifier":
@@ -84,22 +97,34 @@ def train_and_evaluate():
     target = cfg["project"]["target"]
     abt_dir = PROJECT_ROOT / cfg["paths"]["abt_dir"]
     model_base_dir = PROJECT_ROOT / cfg["paths"]["model_dir"]
+    abt_files = cfg["abt_files"]
 
     # Carregamento
-    train_df = pd.read_parquet(abt_dir / "abt_train.parquet")
-    val_df = pd.read_parquet(abt_dir / "val_data.parquet")
+    train_df = pd.read_parquet(abt_dir / abt_files["train"])
+    val_df = pd.read_parquet(abt_dir / abt_files["val"])
+    test_df = pd.read_parquet(abt_dir / abt_files["test"])
+
     X_train, y_train = train_df.drop(columns=[target]), train_df[target]
     X_val, y_val = val_df.drop(columns=[target]), val_df[target]
-    
+    X_test, y_test = test_df.drop(columns=[target]), test_df[target]
+
     eval_dir = model_base_dir / "evaluation_data"
     eval_dir.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(X_val, eval_dir / "X_test.pkl")
-    joblib.dump(y_val, eval_dir / "y_test.pkl")
-    joblib.dump(list(X_val.columns), eval_dir / "feature_names.pkl")
+    # X_test/y_test = holdout de verdade. Nunca usado em fit(), early
+    # stopping ou seleção de threshold. É isso que evaluation.ipynb e
+    # best_model.py devem carregar.
+    joblib.dump(X_test, eval_dir / "X_test.pkl")
+    joblib.dump(y_test, eval_dir / "y_test.pkl")
+    joblib.dump(list(X_test.columns), eval_dir / "feature_names.pkl")
     joblib.dump(X_train.median(numeric_only=True), eval_dir / "medianas.pkl")
 
-    modelos = build_models(cfg)
+    # Guardamos o val separado, pra quem quiser auditar se o threshold
+    # ficou colado demais nos dados em que foi tunado.
+    joblib.dump(X_val, eval_dir / "X_val.pkl")
+    joblib.dump(y_val, eval_dir / "y_val.pkl")
+
+    modelos = build_models(cfg, y_train=y_train)
 
     resultados = []
 
@@ -116,12 +141,22 @@ def train_and_evaluate():
         probs = model.predict_proba(X_val)[:, 1]
         auc = roc_auc_score(y_val, probs)
         
-        # Threshold
+        # Threshold 
         precision, recall, thresholds = precision_recall_curve(y_val, probs)
-        idx = np.where(precision >= 0.35)[0]
-        best_thresh = thresholds[idx[0]] if (len(idx) > 0 and idx[0] < len(thresholds)) else 0.5
-        resultados.append({'Modelo': nome, 'AUC': auc, 'Threshold': best_thresh})
+        min_recall = cfg.get("evaluation", {}).get("min_recall_target", 0.70)
+
+        # precision/recall têm 1 elemento a mais que thresholds
+        idx_validos = np.where(recall[:-1] >= min_recall)[0]
+
+        if len(idx_validos) > 0:
+            melhor_idx = idx_validos[np.argmax(precision[idx_validos])]
+            best_thresh = thresholds[melhor_idx]
+        else:
+            best_thresh = 0.5
+            print(f"AVISO ({nome}): nenhum threshold atingiu recall >= {min_recall}; usando 0.5")
         
+        resultados.append({'Modelo': nome, 'AUC': auc, 'Threshold': best_thresh})     
+          
         # PERSISTÊNCIA DINÂMICA
         # O nome do arquivo .pkl agora usa o nome do modelo (ex: XGBOOST.pkl)
         save_path = model_base_dir / nome
