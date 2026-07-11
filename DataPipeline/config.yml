@@ -47,7 +47,8 @@ data:
     previous_application: previous_application.parquet
   abt_files: 
     train: abt_train.parquet                              
-    val: val_data.parquet                                
+    val: val_data.parquet         
+    test: test_data.parquet                       
 
 # --- Sanitização (raw -> clean) ---------------------------------------------
 sanitization:
@@ -71,4 +72,6 @@ abt:
     AMT_CREDIT_SUM: TOTAL_CREDIT_EXT
     AMT_CREDIT_SUM_DEBT: TOTAL_DEBT
     SK_ID_PREV: QTD_PREV_APPS
+  test_size: 0.20
+  val_size: 0.20
   fill_missing_after_merge: 0          # clientes sem histórico recebem 0
