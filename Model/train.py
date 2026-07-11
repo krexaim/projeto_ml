@@ -86,8 +86,8 @@ def train_and_evaluate():
     model_base_dir = PROJECT_ROOT / cfg["paths"]["model_dir"]
 
     # Carregamento
-    train_df = pd.read_csv(abt_dir / "abt_train.csv")
-    val_df = pd.read_csv(abt_dir / "val_data.csv")
+    train_df = pd.read_parquet(abt_dir / "abt_train.parquet")
+    val_df = pd.read_parquet(abt_dir / "val_data.parquet")
     X_train, y_train = train_df.drop(columns=[target]), train_df[target]
     X_val, y_val = val_df.drop(columns=[target]), val_df[target]
     
