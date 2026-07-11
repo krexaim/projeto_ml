@@ -18,13 +18,17 @@ project:
 # --- Entrada (onde está a ABT) ----------------------------------------------
 data:
   data_dir: Dados
-  abt_file: abt.csv
 
 # --- Saída (modelo treinado + gráficos) -------------------------------------
 paths:
   model_dir: Model/artifacts
   abt_dir: Dados/abt
 
+# --- Arquivos da ABT --------------------------------------------------------
+abt_files:
+  train: abt_train.parquet
+  val: val_data.parquet
+  test: test_data.parquet
 
 # --- Modelagem (abt -> modelo) ----------------------------------------------
 models:
@@ -36,9 +40,9 @@ models:
       n_estimators: 1000
       learning_rate: 0.05
       max_depth: 5
-      scale_pos_weight: 5
+      scale_pos_weight: auto   # calculado em runtime a partir de y_train (ver train.py)
       early_stopping_rounds: 50
-
+      
   RANDOM_FOREST:
     enabled: true
     class: RandomForestClassifier
@@ -63,7 +67,8 @@ feature_engineering:
 # --- Avaliação (métrica oficial: ROC AUC) -----------------------------------
 evaluation:
   primary_metric: roc_auc
-  report_metrics:                      # Dia 3 exige mais de uma métrica
+  min_recall_target: 0.70              # piso de recall usado no threshold (train.py)
+  report_metrics:                      
     - roc_auc
     - precision
     - recall
