@@ -211,19 +211,20 @@ def prepare_model_data(
     target: str,
     random_state: int,
     test_size: float = 0.20,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+    val_size: float = 0.20,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Realiza o encoding das variáveis categóricas e divide
-    os dados em treino e validação.
+    os dados em treino, validação e teste (holdout).
     """
 
     features = df.drop(
-    columns=[
-        target,
-        "SK_ID_CURR",
-    ],
-    errors="ignore",
-)
+        columns=[
+            target,
+            "SK_ID_CURR",
+        ],
+        errors="ignore",
+    )
 
     features = pd.get_dummies(
         features,
@@ -232,10 +233,24 @@ def prepare_model_data(
 
     features[target] = df[target]
 
-    train, validation = train_test_split(
+    # 1ª divisão: separa o TEST (holdout) do resto. Só deve ser tocado
+    # uma vez, no final, para avaliar o modelo já escolhido.
+    train_val, test = train_test_split(
         features,
         test_size=test_size,
         stratify=features[target],
+        random_state=random_state,
+    )
+
+    # 2ª divisão: separa TREINO de VALIDAÇÃO dentro do que sobrou.
+    # val_size é fração do dataset ORIGINAL, então reconvertemos para
+    # fração do que sobrou depois de tirar o test.
+    val_relative_size = val_size / (1 - test_size)
+
+    train, validation = train_test_split(
+        train_val,
+        test_size=val_relative_size,
+        stratify=train_val[target],
         random_state=random_state,
     )
 
@@ -248,17 +263,14 @@ def prepare_model_data(
     numeric_cols = train.drop(columns=[target]).select_dtypes(include="number").columns
     medianas_treino = train[numeric_cols].median()
 
-    train[numeric_cols] = train[numeric_cols].fillna(medianas_treino)
-    validation[numeric_cols] = validation[numeric_cols].fillna(medianas_treino)
+    for split in (train, validation, test):
+        split[numeric_cols] = split[numeric_cols].fillna(medianas_treino)
+        # Fallback: se alguma coluna do treino for 100% nula, a mediana
+        # também sai NaN — preenche com 0 pra garantir que nenhum NaN
+        # sobrevive antes do .fit() do modelo.
+        split[numeric_cols] = split[numeric_cols].fillna(0)
 
-    # Fallback: se alguma coluna do treino for 100% nula, a mediana também
-    # sai NaN — nesse caso extremo, preenche com 0 pra garantir que nenhum
-    # NaN sobrevive antes do .fit() do modelo.
-    train[numeric_cols] = train[numeric_cols].fillna(0)
-    validation[numeric_cols] = validation[numeric_cols].fillna(0)
-
-    return train, validation
-
+    return train, validation, test
 
 def build_abt(cfg: dict | None = None) -> None:
     """
@@ -276,6 +288,7 @@ def build_abt(cfg: dict | None = None) -> None:
     target = cfg["project"]["target"]
     random_state = cfg["project"]["random_state"]
     test_size = cfg.get("abt", {}).get("test_size", 0.20)
+    val_size = cfg.get("abt", {}).get("val_size", 0.20)
 
     print("Carregando tabelas...")
 
@@ -329,27 +342,30 @@ def build_abt(cfg: dict | None = None) -> None:
 
     df.replace([np.inf, -np.inf], np.nan, inplace=True)
 
-    train, validation = prepare_model_data(
+    train, validation, test = prepare_model_data(
         df=df,
         target=target,
         random_state=random_state,
         test_size=test_size,
+        val_size=val_size,
     )
 
     print("Salvando ABTs...")
 
     train_ref = abt_dir / abt_files["train"]
     val_ref = abt_dir / abt_files["val"]
+    test_ref = abt_dir / abt_files["test"]
 
     train.to_parquet(train_ref, index=False)
     validation.to_parquet(val_ref, index=False)
+    test.to_parquet(test_ref, index=False)
 
     print("-" * 50)
     print("ABT criada com sucesso.")
     print(f"Treino: {train.shape}")
     print(f"Validação: {validation.shape}")
-    print(f"Salvo em: {train_ref} e {val_ref}")
-
+    print(f"Teste (holdout): {test.shape}")
+    print(f"Salvo em: {train_ref}, {val_ref} e {test_ref}")
 
 if __name__ == "__main__":
     build_abt()
